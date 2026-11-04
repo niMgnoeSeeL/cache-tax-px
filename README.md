@@ -1,3 +1,27 @@
+## Local fork changes (2.3.1-px.2)
+
+The layout coordinator's decisions after measuring 2.3.1-px.1 in the shared box, VS Code only; the terminal, the desktop and mobile are unchanged.
+
+- **The block brings its own space and owns the box's bottom edge.** Standing alone (nothing drawn beneath), the block is a column with `paddingTop` 0.2 lines, so textfold-px's `startsSpaced` adds no gap above it. Under rows beneath it keeps the column `[rows, row]` with no top padding, so textfold's gap stays above those rows, and a `rowGap` of 0.2 lines. Either way the block ends with `paddingBottom` 0.005 lines: as the lowest block it owns the box's bottom edge, and textfold-px's `endsSpaced` then drops its own bottom padding.
+- **The row is held to 0.86 lines (about 15.7px), centred**, so less of the text's half-leading sits under its letters. Only half-leading reaches past the height, so nothing is clipped (no `overflow`).
+- **A cold word is in the theme's text color** (`color="text"`), not orange: no orange reaches 4.5:1 on both editor themes. The icon's orange lid (3:1 or more on both) carries the cue. Warm stays `success`; unknown and stopped have no color.
+- **A stopped loop says its reason once:** `cache-tax stopped · <reason>`, without `keepwarm stopped:`.
+- **Measured by ink** in the composite preview (savvy-progress-px, textfold-px 0.2.3-px.5 and this mod, at 280, 420 and 640px, light and dark): fold → this row, reflect's rows → this row, and this row → the box's edge all read 5±0.5px. Under the row the reading depends on the letters shown: 4.5–4.75px where they have descenders, 5.5px where they have none.
+
+## Local fork changes (2.3.1-px.1)
+
+This is `cache-tax-px`, a local fork of cache-tax 2.3.1, installed as `cache-tax@claude-mod`. It changes only how the row above the prompt is laid out, to the shared box's contract in `claude-mod/layout/ABOVE-PROMPT.md` (C1 and C2). The guard, the pings, the commands and their wording are upstream's.
+
+- **VS Code draws the row in the box above the prompt**, as the terminal and the desktop do, instead of a status line of its own outside the box. Only mobile, which has no band, keeps `$.ui.status`.
+  - One line: `Box flexDirection="row" flexWrap="nowrap" alignItems="center" columnGap={1}`, holding the cube as a 14×14 `Svg` in a `Box flexShrink={0}`, then a `Box flexShrink={1} minWidth={0}` with `Text color="inactive" wrap="truncate-end"`.
+  - The text is `cache-tax `, the state word as a nested Text with its own `wrap="truncate-end"`, then ` · ` and the status without its leading `keepwarm `: `cache-tax warm · 3h00m left · ping in 50m`. Every state keeps its wording after that prefix. (2.3.1-px.2 drops `stopped:` after a stopped word.)
+  - The state word is `success` when warm and the existing orange when cold (`#d97757`, or `#c15f3c` under a light Claude theme); unknown and stopped have no color. No `dimColor` and no bold. (2.3.1-px.2 changes the cold word to the text color.)
+  - The cube is one markup for both editor themes: strokes in `currentColor`, which the webview sets to the theme's text color, and the lid halfway between the dark and light fills (`#589640` warm, `#cd6b4a` cold, `#7d7d76` otherwise), 3.4:1 or more against both themes' backgrounds. `NO_COLOR` gives the grey lid and an uncolored word. `tools/generate-status-icons.py` writes these beside the old ones; the old ones are unchanged byte for byte.
+  - The row never wraps; in a narrow panel it ends in `…`.
+- **Stacking, on every surface:** the row goes under what the hooks beneath drew (reflect-mod's rows, for one). Claude Code's own placeholder (`{ type: 'engine' }`) is never nested, since the desktop drops a band that nests it: when it, or a tree that draws nothing, is beneath, the row stands alone. Before, the terminal and the desktop nested it.
+- **VS Code gap:** under rows beneath, a `rowGap` of 0.13 lines, which measures 5px of visible space; none when those rows bring their own space under them. No space above or below the row: textfold-px adds it. (2.3.1-px.2 replaces this; see above.)
+- **The terminal and the desktop** draw the same tree as before, apart from the placeholder fix.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="site/assets/cache-tax-dark.svg">
   <img src="site/assets/cache-tax-light.svg" alt="Cache Tax" width="64" height="64">
@@ -74,9 +98,9 @@ The refusal, verbatim:
 
 The figure is an upper bound. The context count the engine reports for a resumed session is the last response's input, cache read, cache write and output together, and the resume payload carries no separate output count to take off; on one 15-day-old session the refusal said 330,316 tokens and $6.61 and the write that followed was 314k tokens, $6.28.
 
-While keepwarm is armed, the terminal and Desktop Code tab show a row above the prompt with the Cache Tax cube. Its lid is green for warm, orange for cold, and grey before the first turn or after compaction. The bold state label matches; the timer and receipt text use normal weight. Ghostty and kitty can draw the image; other terminals show `[>]` in its place. A nonempty `NO_COLOR` selects a bold text icon and an uncolored state label. The row also says `warm`, `cold` or `unknown`, so color is never the only signal. These states use the same one-hour clock as `/cache-tax`; they are estimates, not a live server cache check.
+While keepwarm is armed, the terminal, the Desktop Code tab and VS Code show a row above the prompt with the Cache Tax cube. Its lid is green for warm, orange for cold, and grey before the first turn or after compaction. On the terminal and the desktop the bold state label matches; the timer and receipt text use normal weight. In VS Code the row is one quiet line in the box the editor draws above the prompt: the cube, whose outline takes the editor theme's text color, then `cache-tax`, the state word, and the timer, as in `cache-tax warm · 3h00m left · ping in 50m`. The word `warm` is green; `cold` is in the text color, the cube's orange lid carrying the cue. A stopped loop reads `cache-tax stopped · <reason>`. It never wraps; in a narrow panel it ends in `…`. Ghostty and kitty can draw the image; other terminals show `[>]` in its place. A nonempty `NO_COLOR` selects a bold text icon and an uncolored state label. The row also says `warm`, `cold` or `unknown`, so color is never the only signal. These states use the same one-hour clock as `/cache-tax`; they are estimates, not a live server cache check.
 
-The row includes the warming window, next ping and last readback. A stopped loop shows a neutral symbol and its reason. `/keepwarm off` or an expired window removes the row. Surveys temporarily take priority, and other mods' content stays in the band. Sessions without this band retain the plain status text.
+The row includes the warming window, next ping and last readback. A stopped loop shows a neutral symbol and its reason. `/keepwarm off` or an expired window removes the row. Surveys temporarily take priority, and other mods' content stays in the band, above this row. Mobile, which has no band, keeps the plain status text.
 
 The cube follows Claude's light or dark theme. Its terminal image also has a contrasting edge for terminal backgrounds that differ from that setting. The embedded assets come from the website's official SVGs; maintainers can regenerate them with `python3 tools/generate-status-icons.py` and `rsvg-convert` installed. No image files are read or fetched at runtime.
 

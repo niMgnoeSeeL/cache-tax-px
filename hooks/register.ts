@@ -494,6 +494,52 @@ export function freshState(): State {
   }
 }
 
+// VS Code's icon, in CSS pixels: a little under the row's 18.2px line (1.4 × 13px), centered on it.
+const ICON_PX = 14
+
+// VS Code's row is held to a little under the band's line (1.4 × 13px at the chat font's default), centred, so that
+// less of the text's half-leading sits under its letters. The overflow is half-leading alone, so nothing is clipped.
+const ROW_LINES = 0.86
+
+// VS Code's space around this block, in the band's lines, measured by ink in the host's frame (1px under the title,
+// 4px at the bottom) so that each visible gap is 5px (layout contract C2):
+// - above the row when it stands alone under textfold's fold row, and between the rows beneath and the row: the row's
+//   first ink, the icon's top, sits 1.25 to 1.4px under its top;
+// - under the row: its last ink sits 0.55 to 0.8px over its bottom where the letters shown have descenders, and the
+//   icon's bottom, about 1.4px over it, where they have none (`cold no…` cut at 280px). The bottom padding is held
+//   small, so that the two read 4.5 to 4.75 and 5.5, both within half a pixel; it also tells the block above that this
+//   block owns the box's bottom edge.
+const SPACE = { above: 0.2, between: 0.2, end: 0.005 } as const
+
+/** Whether a tree is Claude Code's own drawing, `{ type: 'engine' }`, which stands only at the root. */
+export function isEngine(node: unknown): boolean {
+  return typeof node === 'object' && node !== null && (node as { type?: unknown }).type === 'engine'
+}
+
+/** Whether a tree shows anything. A Box or Text that holds only empty ones and blank strings shows nothing; a drawn element keeps its children beside its props, not in them. */
+export function draws(node: unknown): boolean {
+  if (node == null || typeof node === 'boolean') return false
+  if (typeof node === 'string') return node.trim() !== ''
+  if (Array.isArray(node)) return node.some(draws)
+  if (typeof node !== 'object') return true
+  const { type, children, props } = node as { type?: string; children?: unknown; props?: { children?: unknown } }
+  if (type !== 'Box' && type !== 'Text') return true
+  return draws(children) || draws(props?.children)
+}
+
+/** Whether a tree ends with space of its own under it: a bottom padding or margin on its root, or on the last of a column's children, as far down as the last row goes. */
+export function endsSpaced(node: unknown): boolean {
+  if (typeof node !== 'object' || node === null || (node as { type?: unknown }).type !== 'Box') return false
+  const { props = {}, children = [] } = node as { props?: Record<string, unknown>; children?: unknown[] }
+  const spaced = ['paddingBottom', 'paddingY', 'padding', 'marginBottom', 'marginY', 'margin'].some(k => {
+    const v = props[k]
+    return (typeof v === 'number' && v > 0) || (typeof v === 'string' && v !== '' && v !== '0')
+  })
+  if (spaced) return true
+  const kids = Array.isArray(children) && children.length ? children : Array.isArray(props.children) ? props.children : []
+  return props.flexDirection === 'column' && endsSpaced(kids[kids.length - 1])
+}
+
 export const register: Register = on => {
   const s = freshState()
   let light = false
@@ -516,28 +562,62 @@ export const register: Register = on => {
     if (!text || (s.deadline && now >= s.deadline)) return rest
     const state = s.stopped ? 'stopped' : !s.lastRequestAt || s.compacted ? 'unknown' : isCold(s, now) ? 'cold' : 'warm'
     const color = noColor ? undefined : state === 'warm' ? 'success' : state === 'cold' ? (light ? '#c15f3c' : '#d97757') : undefined
+    // VS Code: no orange reaches 4.5:1 on both editor themes, so a cold word takes the theme's text color and the
+    // icon's orange lid (3:1 or more on both) carries the cue
+    const word = noColor ? undefined : state === 'warm' ? 'success' : state === 'cold' ? 'text' : undefined
     const { Box, Text } = $.ui.resolve(e)
-    const asset = statusIcons[light ? 'light' : 'dark'][state === 'warm' || state === 'cold' ? state : 'neutral']
-    const icon = noColor ? Text({ bold: true, children: ['[>]'] })
-      : e.surface === 'terminal' ? $.ui.resolve(e).Image({ source: { png: asset.png }, columns: 3, rows: 1, alt: '[>]' })
-      : e.surface === 'desktop' ? $.ui.resolve(e).Svg({ source: asset.svg, width: 18, height: 18, alt: 'Cache Tax' })
-      : Text({ color, bold: true, children: ['[>]'] })
-    return Box({ flexDirection: 'column', children: [
-      rest,
-      Box({ flexDirection: 'row', alignItems: 'center', children: [
+    const shade = state === 'warm' || state === 'cold' ? state : 'neutral'
+    let row
+    if (e.surface === 'vscode') {
+      // VS Code's box: one quiet line in the theme's secondary color, the state word alone in its own. It never
+      // wraps; at a narrow width it ends in an ellipsis. The nested Text carries its own wrap, or the webview breaks
+      // the line there. The icon's strokes take the editor theme's text color, whichever theme it is. A stopped
+      // loop says its reason once: `cache-tax stopped · <reason>`.
+      const icon = statusIcons.vscode[noColor ? 'neutral' : shade].svg
+      const details = s.stopped ?? text.replace(/^keepwarm /, '')
+      row = Box({ flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', columnGap: 1, height: ROW_LINES, children: [
+        Box({ flexShrink: 0, children: [$.ui.resolve(e).Svg({ source: icon, width: ICON_PX, height: ICON_PX, alt: 'Cache Tax' })] }),
+        Box({ flexShrink: 1, minWidth: 0, children: [
+          Text({ color: 'inactive', wrap: 'truncate-end', children: [
+            'cache-tax ',
+            Text({ ...(word ? { color: word } : {}), wrap: 'truncate-end', children: [state] }),
+            ` · ${details}`,
+          ] }),
+        ] }),
+      ] })
+    } else {
+      const asset = statusIcons[light ? 'light' : 'dark'][shade]
+      const icon = noColor ? Text({ bold: true, children: ['[>]'] })
+        : e.surface === 'terminal' ? $.ui.resolve(e).Image({ source: { png: asset.png }, columns: 3, rows: 1, alt: '[>]' })
+        : e.surface === 'desktop' ? $.ui.resolve(e).Svg({ source: asset.svg, width: 18, height: 18, alt: 'Cache Tax' })
+        : Text({ color, bold: true, children: ['[>]'] })
+      row = Box({ flexDirection: 'row', alignItems: 'center', children: [
         Box({ flexShrink: 0, children: [icon] }),
         Text({ children: [
           ' cache-tax · ',
           Text({ color, bold: true, children: [state] }),
           ` · ${text}`,
         ] }),
-      ] }),
-    ] })
+      ] })
+    }
+    // The box above the prompt is shared: this row goes under what the hooks beneath drew. Claude Code's own
+    // placeholder is never nested, since the desktop drops a band that nests it, and nothing drawn leaves the row alone.
+    const below = isEngine(rest) || !draws(rest) ? null : rest
+    // The terminal, the desktop and mobile stack rows with no gap: the terminal has no half rows
+    if (e.surface !== 'vscode') return below ? Box({ flexDirection: 'column', children: [below, row] }) : row
+    // VS Code's box puts 5px of visible space between one mod's rows and the next and under the last row (layout
+    // contract C2). Standing alone, this block brings its own space above it, so the block above adds none. Under
+    // rows beneath, it adds the gap between them, unless they end with space of their own; their own space above
+    // stays theirs. This row is always the lowest, so the block owns the box's bottom edge: its bottom padding tells
+    // the block above to add none there.
+    if (!below) return Box({ flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end, children: [row] })
+    return Box({ flexDirection: 'column', paddingBottom: SPACE.end, ...(endsSpaced(below) ? {} : { rowGap: SPACE.between }), children: [below, row] })
   })
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    s.hasBand = e.surface === 'terminal' || e.surface === 'desktop'
+    // Mobile, and a session with no surface, have no box above the prompt: they keep the status line.
+    s.hasBand = e.surface === 'terminal' || e.surface === 'desktop' || e.surface === 'vscode'
     if (s.hasBand) {
       const theme = (await $.config.list()).find(row => row.key === 'theme')?.value
       light = typeof theme === 'string' && theme.startsWith('light')
