@@ -502,14 +502,22 @@ const ICON_PX = 14
 const ROW_LINES = 0.86
 
 // VS Code's space around this block, in the band's lines, measured by ink in the host's frame (1px under the title,
-// 4px at the bottom) so that each visible gap is 5px (layout contract C2):
-// - above the row when it stands alone under textfold's fold row, and between the rows beneath and the row: the row's
-//   first ink, the icon's top, sits 1.25 to 1.4px under its top;
+// 4px at the bottom), layout contract C2:
+// - above the row: its first ink, the icon's top, sits 1.25 to 1.4px under the row's top. The space puts it 7px under
+//   the host's title, which leaves the divider over the block 3px over it;
+// - between the rows beneath and the divider's join, unless those rows end with space of their own: from their last
+//   ink, reflect-mod's "+N more" line, whose letters reach its bottom, so that the divider's line is 3px under them;
 // - under the row: its last ink sits 0.55 to 0.8px over its bottom where the letters shown have descenders, and the
 //   icon's bottom, about 1.4px over it, where they have none (`cold no…` cut at 280px). The bottom padding is held
 //   small, so that the two read 4.5 to 4.75 and 5.5, both within half a pixel; it also tells the block above that this
 //   block owns the box's bottom edge.
-const SPACE = { above: 0.2, between: 0.2, end: 0.005 } as const
+const SPACE = { above: 0.195, between: 0.12, end: 0.005 } as const
+
+// The line between two mods' blocks in VS Code's box (C2): 1px of the theme's prompt border color across the
+// content's width, in the band's lines. Its Box takes no height: the line hangs DIVIDER.hang under the join, into
+// the top space of the block beneath, which every block sizes to sit 7px under the host's title; there the line sits
+// 3px over that block's ink.
+const DIVIDER = { line: 0.055, hang: 0.044 } as const
 
 /** Whether a tree is Claude Code's own drawing, `{ type: 'engine' }`, which stands only at the root. */
 export function isEngine(node: unknown): boolean {
@@ -605,13 +613,20 @@ export const register: Register = on => {
     const below = isEngine(rest) || !draws(rest) ? null : rest
     // The terminal, the desktop and mobile stack rows with no gap: the terminal has no half rows
     if (e.surface !== 'vscode') return below ? Box({ flexDirection: 'column', children: [below, row] }) : row
-    // VS Code's box puts 5px of visible space between one mod's rows and the next and under the last row (layout
-    // contract C2). Standing alone, this block brings its own space above it, so the block above adds none. Under
-    // rows beneath, it adds the gap between them, unless they end with space of their own; their own space above
-    // stays theirs. This row is always the lowest, so the block owns the box's bottom edge: its bottom padding tells
-    // the block above to add none there.
-    if (!below) return Box({ flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end, children: [row] })
-    return Box({ flexDirection: 'column', paddingBottom: SPACE.end, ...(endsSpaced(below) ? {} : { rowGap: SPACE.between }), children: [below, row] })
+    // VS Code's box (layout contract C2): this block brings its own space above it, which puts its ink 7px under the
+    // host's title, so the block above adds none. Under rows beneath, a divider line joins them in the middle of the
+    // 7px between: this block adds the space from their last ink to the divider, unless they end with space of their
+    // own, and the space under the divider is this block's own. Their own space above stays theirs. This row is always
+    // the lowest, so the block owns the box's bottom edge: its bottom padding tells the block above to add none there.
+    const block = Box({ flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end, children: [row] })
+    if (!below) return block
+    const divider = Box({
+      flexDirection: 'column',
+      height: 0,
+      ...(endsSpaced(below) ? {} : { marginTop: SPACE.between }),
+      children: [Box({ height: DIVIDER.line, marginTop: DIVIDER.hang, flexShrink: 0, backgroundColor: 'promptBorder' })],
+    })
+    return Box({ flexDirection: 'column', children: [below, divider, block] })
   })
 
   on('session.start', async ($, e, next) => {

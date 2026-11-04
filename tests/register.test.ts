@@ -338,10 +338,14 @@ const bare = (node: unknown): unknown => {
 }
 const textOf = (node: unknown): string => typeof node === 'string' ? node : isEl(node) ? (node.children ?? []).map(textOf).join('') : ''
 
-// hooks/register.ts's ICON_PX, ROW_LINES and SPACE: the 5px gaps of the layout contract's C2, measured by ink
+// hooks/register.ts's ICON_PX, ROW_LINES, SPACE and DIVIDER: the gaps of the layout contract's C2, measured by ink
+// (7px under the host's title, 3px on each side of the divider between two mods' blocks, 5px to the box's edge)
 const ICON_PX = 14
 const ROW_LINES = 0.86
-const SPACE = { above: 0.2, between: 0.2, end: 0.005 } as const
+const SPACE = { above: 0.195, between: 0.12, end: 0.005 } as const
+const DIVIDER = { line: 0.055, hang: 0.044 } as const
+// The band's line at the chat font's default, in CSS px
+const LINE_PX = 1.4 * 13
 
 // VS Code's row. Its state word: `success` when warm, the theme's text color when cold, none otherwise.
 const vscodeRow = (state: string, color: string | undefined, details: string, icon: string) => ({
@@ -358,6 +362,14 @@ const vscodeRow = (state: string, color: string | undefined, details: string, ic
 
 // VS Code's block standing alone: its own space above it, and the box's bottom edge
 const alone = (row: unknown) => ({ type: 'Box', props: { flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end }, children: [row] })
+
+// VS Code's divider at the join under the rows beneath: SPACE.between above it unless they end with space of their own.
+// Its Box takes no height; the line in it hangs DIVIDER.hang under the join, into the block's own space above it.
+const divider = (spaced: boolean) => ({
+  type: 'Box', props: { flexDirection: 'column', height: 0, ...(spaced ? {} : { marginTop: SPACE.between }) }, children: [
+    { type: 'Box', props: { height: DIVIDER.line, marginTop: DIVIDER.hang, flexShrink: 0, backgroundColor: 'promptBorder' } },
+  ] })
+const isDivider = (el: El) => el.type === 'Box' && el.props?.backgroundColor === 'promptBorder'
 
 // The row as the terminal and the desktop drew it before this fork: unchanged. A drawn leaf has no children, a Text
 // with no props no props, and the desktop's table reads `bold` as a semibold weight.
@@ -521,7 +533,7 @@ describe('the box above the prompt', () => {
     expect((drawn.children as El[]).length).toBe(1)
   })
 
-  test('VS Code: under rows beneath, a 5px gap, none above them, and the box\'s bottom edge', async ($, on) => {
+  test('VS Code: under rows beneath, a divider joins them to the block, none above them, and the box\'s bottom edge', async ($, on) => {
     mock.clock(on, { now: START })
     world(on, [], { beneath: 'reflect' })
     await $.session.start({ ...session, surface: 'vscode', isInteractive: true })
@@ -529,15 +541,18 @@ describe('the box above the prompt', () => {
     await $.command.run(run('keepwarm', '90m'))
     const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
     const drawn = bare(await ui.drawn()) as El
-    // No top padding: the block above keeps its own gap over the rows beneath
-    expect(drawn.props).toEqual({ flexDirection: 'column', paddingBottom: SPACE.end, rowGap: SPACE.between })
-    const [theirs, row] = drawn.children as El[]
+    // No space on the root: the block above keeps its own gap over the rows beneath, and the block under the divider,
+    // the same as it stands alone, owns the box's bottom edge
+    expect(drawn.props).toEqual({ flexDirection: 'column' })
+    const [theirs, line, block] = drawn.children as El[]
     expect(textOf(theirs)).toBe('reflect · "Answer in Korean"')
     expect(all(theirs).filter(el => el.type === 'Button').map(el => el.props?.label)).toEqual(['Save to ./CLAUDE.md', 'Skip'])
-    expect(row).toEqual(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg))
+    expect(line).toEqual(divider(false))
+    expect(block).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
+    expect(endsSpaced(drawn)).toBe(true)
   })
 
-  test('VS Code: rows beneath that bring their own space under them get no gap added', async ($, on) => {
+  test('VS Code: rows beneath that bring their own space under them get no space added above the divider', async ($, on) => {
     mock.clock(on, { now: START })
     world(on, [], { beneath: 'spaced' })
     await $.session.start({ ...session, surface: 'vscode', isInteractive: true })
@@ -545,8 +560,26 @@ describe('the box above the prompt', () => {
     await $.command.run(run('keepwarm', '90m'))
     const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
     const drawn = bare(await ui.drawn()) as El
-    expect(drawn.props).toEqual({ flexDirection: 'column', paddingBottom: SPACE.end })
+    expect(drawn.props).toEqual({ flexDirection: 'column' })
     expect((drawn.children as El[])[0].props).toMatchObject({ paddingBottom: 0.3 })
+    expect((drawn.children as El[])[1]).toEqual(divider(true))
+    expect((drawn.children as El[]).length).toBe(3)
+  })
+
+  test('VS Code: the divider is a 1px line of the prompt\'s border color whose Box takes no height', async ($, on) => {
+    // At the chat font's 13px the line is a pixel, within a twentieth, and it hangs under its join by less than the
+    // block's own space above its row
+    expect(Math.abs(DIVIDER.line * LINE_PX - 1)).toBeLessThan(0.05)
+    expect((DIVIDER.hang + DIVIDER.line) * LINE_PX).toBeLessThan(SPACE.above * LINE_PX)
+    mock.clock(on, { now: START })
+    world(on, [], { beneath: 'reflect' })
+    await $.session.start({ ...session, surface: 'vscode', isInteractive: true })
+    await $.turn.complete(turn())
+    await $.command.run(run('keepwarm', '90m'))
+    const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
+    const lines = all(await ui.drawn()).filter(isDivider)
+    expect(lines.length).toBe(1)
+    expect(lines[0].props).toEqual({ height: DIVIDER.line, marginTop: DIVIDER.hang, flexShrink: 0, backgroundColor: 'promptBorder' })
   })
 
   for (const surface of ['terminal', 'desktop'] as const) {
@@ -562,6 +595,9 @@ describe('the box above the prompt', () => {
         : { type: 'Svg', props: { source: statusIcons.dark[state].svg, width: 18, height: 18, alt: 'Cache Tax' } }
       let drawn = bare(await ui.drawn()) as El
       expect(drawn.props).toEqual({ flexDirection: 'column' })
+      // No divider: the rows beneath and then the row, as before
+      expect((drawn.children as El[]).length).toBe(2)
+      expect(all(drawn).some(el => el.props?.backgroundColor === 'promptBorder')).toBe(false)
       expect(textOf((drawn.children as El[])[0])).toBe('reflect · "Answer in Korean"')
       expect((drawn.children as El[])[1]).toEqual(classicRow(icon('warm'), 'warm', 'success', 'keepwarm 3h00m left · ping in 50m', surface === 'desktop'))
       await clock.advance(HOUR)
