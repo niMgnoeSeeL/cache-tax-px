@@ -1,4 +1,4 @@
-## Local fork changes (2.3.1-px.3)
+## Local fork changes (2.3.1-px.4)
 
 This is `cache-tax-px`, a local fork of cache-tax 2.3.1, installed as `cache-tax@claude-mod`. It changes only how the row above the prompt is laid out, to the shared box's contract in `claude-mod/layout/ABOVE-PROMPT.md` (C1 and C2). The guard, the pings, the commands and their wording are upstream's.
 
@@ -9,6 +9,7 @@ This is `cache-tax-px`, a local fork of cache-tax 2.3.1, installed as `cache-tax
   - The cube is one markup for both editor themes: strokes in `currentColor`, which the webview sets to the theme's text color, and the lid halfway between the dark and light fills (`#589640` warm, `#cd6b4a` cold, `#7d7d76` otherwise), 3.4:1 or more against both themes' backgrounds. `NO_COLOR` gives the grey lid and an uncolored word. `tools/generate-status-icons.py` writes these beside the terminal's and the desktop's icons, which are upstream's byte for byte.
   - The row is held to 0.86 lines (about 15.7px), centred, so less of the text's half-leading sits under its letters. Only half-leading reaches past the height, so nothing is clipped (no `overflow`).
   - The row never wraps; in a narrow panel it ends in `…`.
+  - VS Code runs the session as an SDK process that starts with no surface and attaches later: when a terminal, desktop or VS Code surface attaches (`session.attach`), the row moves into the box and the status line is cleared.
 - **Stacking, on every surface:** the row goes under what the hooks beneath drew (reflect-mod's rows, for one). Claude Code's own placeholder (`{ type: 'engine' }`) is never nested, since the desktop drops a band that nests it: when it, or a tree that draws nothing, is beneath, the row stands alone.
 - **Space in VS Code's box** (C2), measured by ink at the 13px chat font, in lines of 1.4 × 13px:
   - **The block brings its own space above its row** (`paddingTop 0.195`): the icon's top sits 7px under the host's title when the block is the box's first, and 3px under the divider when a block is above it. textfold-px's `startsSpaced` then adds no space under its divider.

@@ -1,4 +1,4 @@
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, RenderSurface } from 'claude-code'
 import { statusIcons } from './status-icons'
 
 const TTL_MS = 60 * 60 * 1000
@@ -548,6 +548,18 @@ export function endsSpaced(node: unknown): boolean {
   return props.flexDirection === 'column' && endsSpaced(kids[kids.length - 1])
 }
 
+// Mobile, and a session with no surface, have no box above the prompt: they keep the status line. A surface with a box
+// moves the row into it, at the start or when it attaches later (VS Code runs the session as an SDK process). The
+// preferences the row is drawn with are read then, once; null when nothing changed.
+async function drawIn($: EngineInterface, s: State, surface: RenderSurface | null): Promise<{ light: boolean; noColor: boolean } | null> {
+  if (s.hasBand || !(surface === 'terminal' || surface === 'desktop' || surface === 'vscode')) return null
+  s.hasBand = true
+  const theme = (await $.config.list()).find(row => row.key === 'theme')?.value
+  const noColor = Boolean(await $.env.get('NO_COLOR'))
+  $.ui.status(undefined)
+  return { light: typeof theme === 'string' && theme.startsWith('light'), noColor }
+}
+
 export const register: Register = on => {
   const s = freshState()
   let light = false
@@ -631,14 +643,8 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
-    // Mobile, and a session with no surface, have no box above the prompt: they keep the status line.
-    s.hasBand = e.surface === 'terminal' || e.surface === 'desktop' || e.surface === 'vscode'
-    if (s.hasBand) {
-      const theme = (await $.config.list()).find(row => row.key === 'theme')?.value
-      light = typeof theme === 'string' && theme.startsWith('light')
-      noColor = Boolean(await $.env.get('NO_COLOR'))
-      $.ui.status(undefined)
-    }
+    const prefs = await drawIn($, s, e.surface)
+    if (prefs) ({ light, noColor } = prefs)
     const now = await seat($, s)
     await prune($, s, now)
     const saved = await $.store.get(deadlineKey(s))
@@ -670,6 +676,16 @@ export const register: Register = on => {
       $.ui.log('the hook form (cache-tax@claude-code-hooks) is also installed, so a cold send is warned about or refused twice. Uninstall it, or /cache-tax guard warn here.')
     }
     updateStatus($, s, now)
+    return r
+  })
+
+  on('session.attach', async ($, e, next) => {
+    const r = await next(e)
+    const prefs = await drawIn($, s, e.surface)
+    if (prefs) {
+      ({ light, noColor } = prefs)
+      $.ui.invalidate('ui.render')
+    }
     return r
   })
 

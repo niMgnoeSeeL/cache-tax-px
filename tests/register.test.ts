@@ -74,6 +74,7 @@ function world(on: On, forkAnswers: ForkAnswer[], opts: { store?: Map<string, un
   const entered: string[] = []
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.end', ($, e) => ({ sessionId: e.sessionId }))
+  on('session.attach', ($, e) => ({ clientId: e.clientId }))
   on('session.id', () => ({ value: typeof opts.sid === 'function' ? opts.sid() : opts.sid ?? 'S1' }))
   on('session.model', () => ({ value: (typeof opts.model === 'function' ? opts.model() : opts.model) ?? 'claude-fable-5-1' }))
   on('session.usage', () => ({ value: { startedAt: opts.startedAt?.() ?? START, context: { window: 1000000, tokens: opts.live?.tokens }, rateLimits: [] } }))
@@ -395,6 +396,40 @@ describe('the box above the prompt', () => {
     // Only the clear at start, for a status line an earlier version left: never a line of text
     expect(w.status).toEqual([undefined])
     expect(w.forks.length).toBe(1)
+  })
+
+  test('VS Code attaching after an SDK session started with no surface moves the row into the box', async ($, on) => {
+    mock.clock(on, { now: START })
+    const w = world(on, [], { theme: { value: 'light' } })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await $.command.run(run('keepwarm', '90m'))
+    expect(w.status.at(-1)).toBe('keepwarm 1h30m left · ping in 50m')
+    expect(w.reads).toEqual({ theme: 0, env: 0 })
+    await $.session.attach({ surface: 'vscode', clientId: 'vscode:default' })
+    // The status line is cleared, the preferences are read once, and the row is drawn in the box
+    expect(w.status.at(-1)).toBe(undefined)
+    expect(w.reads).toEqual({ theme: 1, env: 1 })
+    const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
+    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
+    // A second client attaching changes nothing, and no status line follows
+    const lines = w.status.length
+    await $.session.attach({ surface: 'mobile', clientId: 'mobile:default' })
+    await $.command.run(run('keepwarm', '2h'))
+    expect(w.status.length).toBe(lines)
+    expect(w.reads).toEqual({ theme: 1, env: 1 })
+    expect(textOf(await ui.drawn())).toBe('cache-tax warm · 2h00m left · ping in 50m')
+  })
+
+  test('a surface without a box attaching keeps the status line', async ($, on) => {
+    mock.clock(on, { now: START })
+    const w = world(on, [])
+    await $.session.start(session)
+    await $.session.attach({ surface: 'mobile', clientId: 'mobile:default' })
+    await $.turn.complete(turn())
+    await $.command.run(run('keepwarm', '90m'))
+    expect(w.status.at(-1)).toBe('keepwarm 1h30m left · ping in 50m')
+    expect(w.reads).toEqual({ theme: 0, env: 0 })
   })
 
   test('VS Code: one line, a little under the band\'s line, that never wraps, ends in an ellipsis, and uses no dimColor or bold', async ($, on) => {
