@@ -1,4 +1,4 @@
-## Local fork changes (2.3.1-px.4)
+## Local fork changes (2.3.1-px.5)
 
 This is `cache-tax-px`, a local fork of cache-tax 2.3.1, installed as `cache-tax@claude-mod`. It changes only how the row above the prompt is laid out, to the shared box's contract in `claude-mod/layout/ABOVE-PROMPT.md` (C1 and C2). The guard, the pings, the commands and their wording are upstream's.
 
@@ -10,6 +10,7 @@ This is `cache-tax-px`, a local fork of cache-tax 2.3.1, installed as `cache-tax
   - The row is held to 0.86 lines (about 15.7px), centred, so less of the text's half-leading sits under its letters. Only half-leading reaches past the height, so nothing is clipped (no `overflow`).
   - The row never wraps; in a narrow panel it ends in `…`.
   - VS Code runs the session as an SDK process that starts with no surface and attaches later: when a terminal, desktop or VS Code surface attaches (`session.attach`), the row moves into the box and the status line is cleared.
+- **Beside the fold row in VS Code.** The block that holds the row carries a stable key, `cache-tax:keepwarm` (`KEEPWARM_KEY`): `{ key, flexDirection: 'column', paddingTop, paddingBottom, children: [row] }`. textfold-px, which sits above this mod, finds it (the root of what it is handed, or the last child of `[rows, divider, block]`) and, where the box is 35 columns wide or more, draws the row at the right end of the fold row's line, dropping the block's spacing and the divider over it. Narrower, or under a mod that does not know the key, the tree is drawn as it is.
 - **Stacking, on every surface:** the row goes under what the hooks beneath drew (reflect-mod's rows, for one). Claude Code's own placeholder (`{ type: 'engine' }`) is never nested, since the desktop drops a band that nests it: when it, or a tree that draws nothing, is beneath, the row stands alone.
 - **Space in VS Code's box** (C2), measured by ink at the 13px chat font, in lines of 1.4 × 13px:
   - **The block brings its own space above its row** (`paddingTop 0.195`): the icon's top sits 7px under the host's title when the block is the box's first, and 3px under the divider when a block is above it. textfold-px's `startsSpaced` then adds no space under its divider.
