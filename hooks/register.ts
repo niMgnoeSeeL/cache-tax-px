@@ -513,6 +513,11 @@ const ROW_LINES = 0.86
 //   block owns the box's bottom edge.
 const SPACE = { above: 0.195, between: 0.12, end: 0.005 } as const
 
+// The key on the VS Code block that holds the keepwarm row: the handoff to a mod above that draws the row beside its
+// own (textfold-px). The block is `{ key, paddingTop, paddingBottom, children: [row] }`, the box's last block; with
+// rows beneath this mod it is the last child of `[rows, divider, block]`.
+export const KEEPWARM_KEY = 'cache-tax:keepwarm'
+
 // The line between two mods' blocks in VS Code's box (C2): 1px of the theme's prompt border color across the
 // content's width, in the band's lines. Its Box takes no height: the line hangs DIVIDER.hang under the join, into
 // the top space of the block beneath, which every block sizes to sit 7px under the host's title; there the line sits
@@ -630,7 +635,9 @@ export const register: Register = on => {
     // 7px between: this block adds the space from their last ink to the divider, unless they end with space of their
     // own, and the space under the divider is this block's own. Their own space above stays theirs. This row is always
     // the lowest, so the block owns the box's bottom edge: its bottom padding tells the block above to add none there.
-    const block = Box({ flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end, children: [row] })
+    // The block carries a stable key, KEEPWARM_KEY, so a mod above (textfold-px) can find this row and draw it beside
+    // its own; one that does not know the key draws the tree as it is
+    const block = Box({ key: KEEPWARM_KEY, flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end, children: [row] })
     if (!below) return block
     const divider = Box({
       flexDirection: 'column',

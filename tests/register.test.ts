@@ -3,7 +3,7 @@ import type { Plugin, TestBody } from 'claude-code/testing'
 import type { CommandRunInput, ConfigSetInput, ElementTable, ModelForkResult, On, PromptSubmitInput, RenderPropsOf, SessionStartInput, TurnCompleteInput, TurnUsage } from 'claude-code'
 
 import { statusIcons } from '../hooks/status-icons'
-import { draws, endsSpaced, fmtDuration, freshState, isEngine, parseDuration, resetForClear, seedFromResume } from '../hooks/register'
+import { draws, endsSpaced, fmtDuration, freshState, isEngine, KEEPWARM_KEY, parseDuration, resetForClear, seedFromResume } from '../hooks/register'
 
 tier('user')
 
@@ -362,7 +362,7 @@ const vscodeRow = (state: string, color: string | undefined, details: string, ic
   ] })
 
 // VS Code's block standing alone: its own space above it, and the box's bottom edge
-const alone = (row: unknown) => ({ type: 'Box', props: { flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end }, children: [row] })
+const alone = (row: unknown) => ({ type: 'Box', props: { key: KEEPWARM_KEY, flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end }, children: [row] })
 
 // VS Code's divider at the join under the rows beneath: SPACE.between above it unless they end with space of their own.
 // Its Box takes no height; the line in it hangs DIVIDER.hang under the join, into the block's own space above it.
@@ -562,7 +562,9 @@ describe('the box above the prompt', () => {
     const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
     const drawn = bare(await ui.drawn()) as El
     // textfold-px's startsSpaced and endsSpaced read these: the block above then adds no gap and no bottom space
-    expect(drawn.props).toEqual({ flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end })
+    // The key is the handoff to a mod above that draws this row beside its own (textfold-px)
+    expect(drawn.props).toEqual({ key: KEEPWARM_KEY, flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end })
+    expect(KEEPWARM_KEY).toBe('cache-tax:keepwarm')
     expect(SPACE.above).toBeGreaterThan(0)
     expect(SPACE.end).toBeGreaterThan(0)
     expect((drawn.children as El[]).length).toBe(1)
