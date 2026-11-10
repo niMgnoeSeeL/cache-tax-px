@@ -513,9 +513,10 @@ const ROW_LINES = 0.86
 //   block owns the box's bottom edge.
 const SPACE = { above: 0.195, between: 0.12, end: 0.005 } as const
 
-// The key on the VS Code block that holds the keepwarm row: the handoff to a mod above that draws the row beside its
-// own (textfold-px). The block is `{ key, paddingTop, paddingBottom, children: [row] }`, the box's last block; with
-// rows beneath this mod it is the last child of `[rows, divider, block]`.
+// The key on the block that holds the keepwarm row: the handoff to a mod above that draws the row beside its own
+// (textfold-px). In VS Code the block is `{ key, paddingTop, paddingBottom, children: [row] }`, the box's last block;
+// with rows beneath this mod it is the last child of `[rows, divider, block]`. In the terminal it is the row itself,
+// alone or the last child of `[rows, row]`.
 export const KEEPWARM_KEY = 'cache-tax:keepwarm'
 
 // The line between two mods' blocks in VS Code's box (C2): 1px of the theme's prompt border color across the
@@ -616,11 +617,14 @@ export const register: Register = on => {
         : e.surface === 'terminal' ? $.ui.resolve(e).Image({ source: { png: asset.png }, columns: 3, rows: 1, alt: '[>]' })
         : e.surface === 'desktop' ? $.ui.resolve(e).Svg({ source: asset.svg, width: 18, height: 18, alt: 'Cache Tax' })
         : Text({ color, bold: true, children: ['[>]'] })
-      row = Box({ flexDirection: 'row', alignItems: 'center', children: [
+      // The terminal's row carries KEEPWARM_KEY too, so textfold-px can draw it beside the fold row, and it truncates
+      // with an ellipsis rather than wrap: beside the levels it takes what they leave, alone it is one line as in VS Code
+      const terminal = e.surface === 'terminal'
+      row = Box({ ...(terminal ? { key: KEEPWARM_KEY, flexWrap: 'nowrap' as const } : {}), flexDirection: 'row', alignItems: 'center', children: [
         Box({ flexShrink: 0, children: [icon] }),
-        Text({ children: [
+        Text({ ...(terminal ? { wrap: 'truncate-end' as const } : {}), children: [
           ' cache-tax · ',
-          Text({ color, bold: true, children: [state] }),
+          Text({ color, bold: true, ...(terminal ? { wrap: 'truncate-end' as const } : {}), children: [state] }),
           ` · ${text}`,
         ] }),
       ] })

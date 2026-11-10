@@ -374,10 +374,11 @@ const isDivider = (el: El) => el.type === 'Box' && el.props?.backgroundColor ===
 
 // The row as the terminal and the desktop drew it before this fork: unchanged. A drawn leaf has no children, a Text
 // with no props no props, and the desktop's table reads `bold` as a semibold weight.
-const classicRow = (icon: unknown, state: string, color: string | undefined, text: string, semibold: boolean) => ({
-  type: 'Box', props: { flexDirection: 'row', alignItems: 'center' }, children: [
+// The terminal's row carries the handoff key and truncates rather than wraps
+const classicRow = (icon: unknown, state: string, color: string | undefined, text: string, semibold: boolean, terminal = false) => ({
+  type: 'Box', props: { ...(terminal ? { key: KEEPWARM_KEY, flexWrap: 'nowrap' } : {}), flexDirection: 'row', alignItems: 'center' }, children: [
     { type: 'Box', props: { flexShrink: 0 }, children: [icon] },
-    { type: 'Text', children: [' cache-tax · ', { type: 'Text', props: { ...(color ? { color } : {}), bold: true, ...(semibold ? { weight: 'semibold' } : {}) }, children: [state] }, ` · ${text}`] },
+    { type: 'Text', ...(terminal ? { props: { wrap: 'truncate-end' } } : {}), children: [' cache-tax · ', { type: 'Text', props: { ...(color ? { color } : {}), bold: true, ...(semibold ? { weight: 'semibold' } : {}), ...(terminal ? { wrap: 'truncate-end' } : {}) }, children: [state] }, ` · ${text}`] },
   ] })
 
 describe('the box above the prompt', () => {
@@ -636,11 +637,11 @@ describe('the box above the prompt', () => {
       expect((drawn.children as El[]).length).toBe(2)
       expect(all(drawn).some(el => el.props?.backgroundColor === 'promptBorder')).toBe(false)
       expect(textOf((drawn.children as El[])[0])).toBe('reflect · "Answer in Korean"')
-      expect((drawn.children as El[])[1]).toEqual(classicRow(icon('warm'), 'warm', 'success', 'keepwarm 3h00m left · ping in 50m', surface === 'desktop'))
+      expect((drawn.children as El[])[1]).toEqual(classicRow(icon('warm'), 'warm', 'success', 'keepwarm 3h00m left · ping in 50m', surface === 'desktop', surface === 'terminal'))
       await clock.advance(HOUR)
       drawn = bare(await ui.drawn()) as El
       // The terminal and the desktop keep the orange word and the keepwarm wording
-      expect((drawn.children as El[])[1]).toEqual(classicRow(icon('cold'), 'cold', '#d97757', 'keepwarm 2h00m left · cold now, first ping 50m after the next turn', surface === 'desktop'))
+      expect((drawn.children as El[])[1]).toEqual(classicRow(icon('cold'), 'cold', '#d97757', 'keepwarm 2h00m left · cold now, first ping 50m after the next turn', surface === 'desktop', surface === 'terminal'))
     })
 
     test(`${surface}: a stopped loop keeps its wording`, async ($, on) => {
