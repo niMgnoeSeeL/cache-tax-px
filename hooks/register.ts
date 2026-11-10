@@ -618,14 +618,16 @@ export const register: Register = on => {
         : e.surface === 'desktop' ? $.ui.resolve(e).Svg({ source: asset.svg, width: 18, height: 18, alt: 'Cache Tax' })
         : Text({ color, bold: true, children: ['[>]'] })
       // The terminal's row carries KEEPWARM_KEY too, so textfold-px can draw it beside the fold row, and it truncates
-      // with an ellipsis rather than wrap: beside the levels it takes what they leave, alone it is one line as in VS Code
+      // with an ellipsis rather than wrap: beside the levels it takes what they leave, alone it is one line as in VS Code.
+      // Its text, as VS Code's, leaves out the status's leading `keepwarm `; every state keeps its wording after it.
       const terminal = e.surface === 'terminal'
       row = Box({ ...(terminal ? { key: KEEPWARM_KEY, flexWrap: 'nowrap' as const } : {}), flexDirection: 'row', alignItems: 'center', children: [
         Box({ flexShrink: 0, children: [icon] }),
         Text({ ...(terminal ? { wrap: 'truncate-end' as const } : {}), children: [
           ' cache-tax · ',
           Text({ color, bold: true, ...(terminal ? { wrap: 'truncate-end' as const } : {}), children: [state] }),
-          ` · ${text}`,
+          // The terminal drops the leading `keepwarm `, as VS Code does: `cache-tax · warm · 1h25m left · ping in 50m`
+          ` · ${terminal ? text.replace(/^keepwarm /, '') : text}`,
         ] }),
       ] })
     }

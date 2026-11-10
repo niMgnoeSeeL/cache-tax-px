@@ -628,6 +628,8 @@ describe('the box above the prompt', () => {
       await $.turn.complete(turn())
       await $.command.run(run('keepwarm', '3h'))
       const ui = await $.ui.mount({ plugin: 'cache-tax', surface, component: 'AbovePrompt', props: bandProps })
+      // The terminal leaves out the status's leading `keepwarm `, as VS Code does; the desktop keeps it
+      const kw = surface === 'terminal' ? '' : 'keepwarm '
       const icon = (state: 'warm' | 'cold') => surface === 'terminal'
         ? { type: 'Image', props: { source: { png: statusIcons.dark[state].png }, columns: 3, rows: 1, alt: '[>]' } }
         : { type: 'Svg', props: { source: statusIcons.dark[state].svg, width: 18, height: 18, alt: 'Cache Tax' } }
@@ -637,11 +639,11 @@ describe('the box above the prompt', () => {
       expect((drawn.children as El[]).length).toBe(2)
       expect(all(drawn).some(el => el.props?.backgroundColor === 'promptBorder')).toBe(false)
       expect(textOf((drawn.children as El[])[0])).toBe('reflect · "Answer in Korean"')
-      expect((drawn.children as El[])[1]).toEqual(classicRow(icon('warm'), 'warm', 'success', 'keepwarm 3h00m left · ping in 50m', surface === 'desktop', surface === 'terminal'))
+      expect((drawn.children as El[])[1]).toEqual(classicRow(icon('warm'), 'warm', 'success', `${kw}3h00m left · ping in 50m`, surface === 'desktop', surface === 'terminal'))
       await clock.advance(HOUR)
       drawn = bare(await ui.drawn()) as El
-      // The terminal and the desktop keep the orange word and the keepwarm wording
-      expect((drawn.children as El[])[1]).toEqual(classicRow(icon('cold'), 'cold', '#d97757', 'keepwarm 2h00m left · cold now, first ping 50m after the next turn', surface === 'desktop', surface === 'terminal'))
+      // The terminal and the desktop keep the orange word, and each state its wording
+      expect((drawn.children as El[])[1]).toEqual(classicRow(icon('cold'), 'cold', '#d97757', `${kw}2h00m left · cold now, first ping 50m after the next turn`, surface === 'desktop', surface === 'terminal'))
     })
 
     test(`${surface}: a stopped loop keeps its wording`, async ($, on) => {
@@ -652,7 +654,7 @@ describe('the box above the prompt', () => {
       await $.command.run(run('keepwarm', '3h'))
       const ui = await $.ui.mount({ plugin: 'cache-tax', surface, component: 'AbovePrompt', props: bandProps })
       await clock.advance(50 * MIN)
-      expect(textOf(await ui.drawn())).toBe(' cache-tax · stopped · keepwarm stopped: the ping read 0 and wrote 200k tokens ($4.00), the cache was already gone')
+      expect(textOf(await ui.drawn())).toBe(` cache-tax · stopped · ${surface === 'terminal' ? '' : 'keepwarm '}stopped: the ping read 0 and wrote 200k tokens ($4.00), the cache was already gone`)
     })
   }
 
