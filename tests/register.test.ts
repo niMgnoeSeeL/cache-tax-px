@@ -422,6 +422,24 @@ describe('the box above the prompt', () => {
     expect(textOf(await ui.drawn())).toBe('cache-tax warm · 2h00m left · ping in 50m')
   })
 
+  test('VS Code drawing the box moves the row into it when no start or attach named VS Code', async ($, on) => {
+    mock.clock(on, { now: START })
+    const w = world(on, [], { theme: { value: 'light' } })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await $.command.run(run('keepwarm', '90m'))
+    expect(w.status.at(-1)).toBe('keepwarm 1h30m left · ping in 50m')
+    const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
+    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
+    // The status line is cleared, the preferences are read once, and later changes redraw the row, not a status line
+    expect(w.status.at(-1)).toBe(undefined)
+    expect(w.reads).toEqual({ theme: 1, env: 1 })
+    const lines = w.status.length
+    await $.command.run(run('keepwarm', '2h'))
+    expect(w.status.length).toBe(lines)
+    expect(textOf(await ui.drawn())).toBe('cache-tax warm · 2h00m left · ping in 50m')
+  })
+
   test('a surface without a box attaching keeps the status line', async ($, on) => {
     mock.clock(on, { now: START })
     const w = world(on, [])

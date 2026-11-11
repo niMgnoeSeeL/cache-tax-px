@@ -582,6 +582,12 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const rest = await next(e)
+    // A surface with a box that asks for it moves the row into it, even when neither session.start nor session.attach
+    // named that surface: the status line under the box is cleared and the row is drawn here from now on
+    if (!s.hasBand) {
+      const prefs = await drawIn($, s, e.surface)
+      if (prefs) ({ light, noColor } = prefs)
+    }
     if (!s.hasBand || e.props.hasSurvey) return rest
     const now = await $.clock.now()
     const text = statusText(s, now)
