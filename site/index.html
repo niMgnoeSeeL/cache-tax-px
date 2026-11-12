@@ -48,8 +48,8 @@
           </div>
           <div>
             <h2>When you return cold</h2>
-            <p>For a context of at least 50,000 tokens, the guard stops your ordinary message once when its one-hour clock says cold. You see the estimated rewrite cost. Resend to continue.</p>
-            <p>After a detected cold write, it automatically arms at least three hours of warming. Run <code>/cache-tax</code> to see the window and this session’s cold-write tally.</p>
+            <p>For a context of at least 50,000 tokens, the guard asks before your ordinary message goes out when its one-hour clock says cold. You see the estimated rewrite cost, then choose Send anyway or Don't send. Where nobody can answer, it stops the message once and the resend goes through.</p>
+            <p>By default, a detected cold write automatically arms at least three hours of warming; the Auto keepwarm option in <code>/config</code> turns that off. Run <code>/cache-tax</code> to see the window and this session’s cold-write tally.</p>
           </div>
         </div>
       </section>
@@ -83,11 +83,11 @@ claude plugin install cache-tax@claude-code-mods</code></pre>
         <ul>
           <li>A ping bills reads, writes, uncached input and output. Fork output is uncapped. The displayed dollars are API-equivalent estimates, not additional subscription charges. Quota savings have not been measured.</li>
           <li>Prefix changes can break the cache before its timer expires. A warm read proves that ping hit the cache; it does not guarantee your next message will.</li>
-          <li>The mod makes model requests over your session and stores its settings. The <a href="https://github.com/karanb192/cache-tax#what-it-can-reach">README lists its hooks, engine calls and threat model</a>.</li>
+          <li>The mod makes model requests over your session and stores its settings. The <a href="https://github.com/karanb192/cache-tax#what-it-can-reach">README lists its hooks, engine calls and threat model</a>, and the <a href="https://mods.aidojo.si/mods/karanb192--cache-tax--cache-tax/">Claude Code mods catalogue shows the same scan</a>.</li>
         </ul>
       </section>
     </main>
-    <footer><p>Cache Tax · An open-source mod by <a href="https://github.com/karanb192">Karan Bansal</a></p><div><a href="https://github.com/karanb192/cache-tax">Source and issues</a><a href="https://code.claude.com/docs/en/prompt-caching">About prompt caching</a></div></footer>
+    <footer><p>Cache Tax · An open-source mod by <a href="https://github.com/karanb192">Karan Bansal</a></p><div><a href="https://github.com/karanb192/cache-tax">Source and issues</a><a href="https://code.claude.com/docs/en/prompt-caching">About prompt caching</a><a href="https://mods.aidojo.si/topics/prompt-cache/">More prompt cache mods</a><a href="https://mods.aidojo.si/">All Claude Code mods</a></div></footer>
   </div>
   <script>
     document.addEventListener('click', async (event) => {
