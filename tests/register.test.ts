@@ -416,7 +416,7 @@ const LINE_PX = 1.4 * 13
 // VS Code's row. Its state word: `success` when warm, the theme's text color when cold, none otherwise.
 const vscodeRow = (state: string, color: string | undefined, details: string, icon: string) => ({
   type: 'Box', props: { flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', columnGap: 1, height: ROW_LINES }, children: [
-    { type: 'Box', props: { flexShrink: 0 }, children: [{ type: 'Svg', props: { source: icon, width: ICON_PX, height: ICON_PX, alt: 'Cache Tax' } }] },
+    { type: 'Box', props: { flexShrink: 0 }, children: [{ type: 'Svg', props: { source: icon, width: ICON_PX, height: ICON_PX, alt: '[>]' } }] },
     { type: 'Box', props: { flexShrink: 1, minWidth: 0 }, children: [
       { type: 'Text', props: { color: 'inactive', wrap: 'truncate-end' }, children: [
         'cache-tax ',

@@ -765,7 +765,9 @@ export const register: Register = (on, options) => {
       const icon = statusIcons.vscode[noColor ? 'neutral' : shade].svg
       const details = s.stopped ?? text.replace(/^keepwarm /, '')
       row = Box({ flexDirection: 'row', flexWrap: 'nowrap', alignItems: 'center', columnGap: 1, height: ROW_LINES, children: [
-        Box({ flexShrink: 0, children: [$.ui.resolve(e).Svg({ source: icon, width: ICON_PX, height: ICON_PX, alt: 'Cache Tax' })] }),
+        // The alt is shown in place of the icon whenever the webview does not draw it, in front of `cache-tax`: the
+        // terminal's own mark, not the name again
+        Box({ flexShrink: 0, children: [$.ui.resolve(e).Svg({ source: icon, width: ICON_PX, height: ICON_PX, alt: '[>]' })] }),
         Box({ flexShrink: 1, minWidth: 0, children: [
           Text({ color: 'inactive', wrap: 'truncate-end', children: [
             'cache-tax ',

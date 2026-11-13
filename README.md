@@ -1,4 +1,4 @@
-## Local fork changes (2.4.2-px.1)
+## Local fork changes (2.4.2-px.2)
 
 This is `cache-tax-px`, a local fork of cache-tax 2.4.2, installed as `cache-tax@claude-mod`. It changes only how the row above the prompt is laid out, to the shared box's contract in `claude-mod/layout/ABOVE-PROMPT.md` (C1 and C2). The guard, the pings, the commands and their wording are upstream's.
 
