@@ -662,7 +662,7 @@ const ROW_LINES = 0.86
 //   icon's bottom, about 1.4px over it, where they have none (`cold no…` cut at 280px). The bottom padding is held
 //   small, so that the two read 4.5 to 4.75 and 5.5, both within half a pixel; it also tells the block above that this
 //   block owns the box's bottom edge.
-const SPACE = { above: 0.195, between: 0.12, end: 0.005 } as const
+const SPACE = { above: 0.085, between: 0.12, end: 0.032 } as const
 
 // The key on the block that holds the keepwarm row: the handoff to a mod above that draws the row beside its own
 // (textfold-px). In VS Code the block is `{ key, paddingTop, paddingBottom, children: [row] }`, the box's last block;
@@ -808,7 +808,8 @@ export const register: Register = (on, options) => {
     // the lowest, so the block owns the box's bottom edge: its bottom padding tells the block above to add none there.
     // The block carries a stable key, KEEPWARM_KEY, so a mod above (textfold-px) can find this row and draw it beside
     // its own; one that does not know the key draws the tree as it is
-    const block = Box({ key: KEEPWARM_KEY, flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end, children: [row] })
+    // It shrinks where box-layout puts it beside the fold row, its text ending in an ellipsis
+    const block = Box({ key: KEEPWARM_KEY, flexDirection: 'column', flexShrink: 1, minWidth: 0, paddingTop: SPACE.above, paddingBottom: SPACE.end, children: [row] })
     if (!below) return block
     const divider = Box({
       flexDirection: 'column',

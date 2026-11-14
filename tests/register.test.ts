@@ -33,21 +33,10 @@ const themeChange = (value: string): ConfigSetInput => ({ key: 'theme', value, p
 
 type ForkAnswer = null | ModelForkResult | { read: number; write: number; out?: number; input?: number }
 
-// What the hooks beneath draw in the box above the prompt: Claude Code's own placeholder, nothing, reflect-mod's
-// rows for one pending rule (a green line, then a row of buttons), or rows that bring their own space under them.
-type Beneath = 'engine' | 'empty' | 'reflect' | 'spaced'
-function drawBeneath(ui: ElementTable, kind: Beneath) {
-  const { Box, Button, Text } = ui
-  if (kind === 'engine') return { type: 'engine', ref: 0 } as never
-  if (kind === 'empty') return Box({ children: [Box({ children: [] }), ' ', Text({ children: [''] })] })
-  const buttons = Box({ flexDirection: 'row', gap: 1, children: [
-    Button({ key: 'save', label: 'Save to ./CLAUDE.md', onPress: () => {} }),
-    Button({ key: 'skip', label: 'Skip', onPress: () => {} }),
-  ] })
-  return Box({ flexDirection: 'column', ...(kind === 'spaced' ? { paddingBottom: 0.3 } : {}), children: [
-    Text({ color: 'green', wrap: 'wrap', children: ['reflect · "Answer in Korean"'] }),
-    buttons,
-  ] })
+// What the hook beneath draws in the box above the prompt: Claude Code's own placeholder
+type Beneath = 'engine'
+function drawBeneath(_ui: ElementTable, _kind: Beneath) {
+  return { type: 'engine', ref: 0 } as never
 }
 
 // The world beneath the mod: its store, the engine's answers, and a fork that
@@ -403,15 +392,16 @@ const bare = (node: unknown): unknown => {
   return { type, ...(props && { props }), ...(children && { children: children.map(bare) }) }
 }
 const textOf = (node: unknown): string => typeof node === 'string' ? node : isEl(node) ? (node.children ?? []).map(textOf).join('') : ''
+// This mod's own row in the box: the drawing's root when it is the only row, else one of the list's rows
+const partOf = (node: unknown) => (node as { part?: { plugin?: string } }).part?.plugin
+const own = (tree: unknown): El | undefined =>
+  partOf(tree) === 'cache-tax' ? (tree as El) : ((tree as El).children ?? []).find((c): c is El => isEl(c) && partOf(c) === 'cache-tax')
 
-// hooks/register.ts's ICON_PX, ROW_LINES, SPACE and DIVIDER: the gaps of the layout contract's C2, measured by ink
-// (7px under the host's title, 3px on each side of the divider between two mods' blocks, 5px to the box's edge)
+// hooks/register.ts's ICON_PX, ROW_LINES and SPACE: the gaps of the layout contract's C2, measured by ink
+// (7px under the host's title, 5px to the box's edge)
 const ICON_PX = 14
 const ROW_LINES = 0.86
-const SPACE = { above: 0.195, between: 0.12, end: 0.005 } as const
-const DIVIDER = { line: 0.055, hang: 0.044 } as const
-// The band's line at the chat font's default, in CSS px
-const LINE_PX = 1.4 * 13
+const SPACE = { above: 0.085, end: 0.032 } as const
 
 // VS Code's row. Its state word: `success` when warm, the theme's text color when cold, none otherwise.
 const vscodeRow = (state: string, color: string | undefined, details: string, icon: string) => ({
@@ -426,16 +416,10 @@ const vscodeRow = (state: string, color: string | undefined, details: string, ic
     ] },
   ] })
 
-// VS Code's block standing alone: its own space above it, and the box's bottom edge
-const alone = (row: unknown) => ({ type: 'Box', props: { key: KEEPWARM_KEY, flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end }, children: [row] })
-
-// VS Code's divider at the join under the rows beneath: SPACE.between above it unless they end with space of their own.
-// Its Box takes no height; the line in it hangs DIVIDER.hang under the join, into the block's own space above it.
-const divider = (spaced: boolean) => ({
-  type: 'Box', props: { flexDirection: 'column', height: 0, ...(spaced ? {} : { marginTop: SPACE.between }) }, children: [
-    { type: 'Box', props: { height: DIVIDER.line, marginTop: DIVIDER.hang, flexShrink: 0, backgroundColor: 'promptBorder' } },
-  ] })
-const isDivider = (el: El) => el.type === 'Box' && el.props?.backgroundColor === 'promptBorder'
+// VS Code's block standing alone: its own space above it, and the box's bottom edge; it shrinks, its text ending in
+// an ellipsis, where it shares a line
+const BLOCK = { key: KEEPWARM_KEY, flexDirection: 'column', flexShrink: 1, minWidth: 0, paddingTop: SPACE.above, paddingBottom: SPACE.end }
+const alone = (row: unknown) => ({ type: 'Box', props: BLOCK, children: [row] })
 
 // The row as the terminal and the desktop drew it before this fork: unchanged. A drawn leaf has no children, a Text
 // with no props no props, and the desktop's table reads `bold` as a semibold weight.
@@ -454,7 +438,7 @@ describe('the box above the prompt', () => {
     await $.turn.complete(turn())
     await $.command.run(run('keepwarm', '90m'))
     const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
-    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
+    expect(bare(own(await ui.drawn()))).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
     await clock.advance(50 * MIN)
     expect(textOf(await ui.drawn())).toBe('cache-tax warm · 40m left · ping in 50m · last ping read 200k $0.05')
     await $.command.run(run('keepwarm', 'off'))
@@ -477,7 +461,7 @@ describe('the box above the prompt', () => {
     expect(w.status.at(-1)).toBe(undefined)
     expect(w.reads).toEqual({ theme: 1, env: 1 })
     const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
-    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
+    expect(bare(own(await ui.drawn()))).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
     // A second client attaching changes nothing, and no status line follows
     const lines = w.status.length
     await $.session.attach({ surface: 'mobile', clientId: 'mobile:default' })
@@ -495,7 +479,7 @@ describe('the box above the prompt', () => {
     await $.command.run(run('keepwarm', '90m'))
     expect(w.status.at(-1)).toBe('keepwarm 1h30m left · ping in 50m')
     const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
-    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
+    expect(bare(own(await ui.drawn()))).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
     // The status line is cleared, the preferences are read once, and later changes redraw the row, not a status line
     expect(w.status.at(-1)).toBe(undefined)
     expect(w.reads).toEqual({ theme: 1, env: 1 })
@@ -525,7 +509,7 @@ describe('the box above the prompt', () => {
     const trees: unknown[] = []
     for (const bodyColumns of [24, 75, 200]) {
       const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: { ...bandProps, bodyColumns } })
-      trees.push(bare(await ui.drawn()))
+      trees.push(bare(own(await ui.drawn())))
     }
     // The row is the same at every width: the webview cuts it, the mod does not shorten it
     expect(trees[1]).toEqual(trees[0])
@@ -568,16 +552,16 @@ describe('the box above the prompt', () => {
     await $.session.start({ ...session, surface: 'vscode', isInteractive: true })
     await $.command.run(run('keepwarm', '3h'))
     const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
-    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('unknown', undefined, '3h00m left · waiting for the first turn', statusIcons.vscode.neutral.svg)))
+    expect(bare(own(await ui.drawn()))).toEqual(alone(vscodeRow('unknown', undefined, '3h00m left · waiting for the first turn', statusIcons.vscode.neutral.svg)))
     await $.turn.complete(turn())
-    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('warm', 'success', '3h00m left · ping in 50m', statusIcons.vscode.warm.svg)))
+    expect(bare(own(await ui.drawn()))).toEqual(alone(vscodeRow('warm', 'success', '3h00m left · ping in 50m', statusIcons.vscode.warm.svg)))
     await clock.advance(HOUR)
     // No orange reaches 4.5:1 on both editor themes: the word takes the text color, the icon's orange lid the cue
-    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('cold', 'text', '2h00m left · cold now, first ping 50m after the next turn', statusIcons.vscode.cold.svg)))
+    expect(bare(own(await ui.drawn()))).toEqual(alone(vscodeRow('cold', 'text', '2h00m left · cold now, first ping 50m after the next turn', statusIcons.vscode.cold.svg)))
     await $.config.set(themeChange('light'))
-    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('cold', 'text', '2h00m left · cold now, first ping 50m after the next turn', statusIcons.vscode.cold.svg)))
+    expect(bare(own(await ui.drawn()))).toEqual(alone(vscodeRow('cold', 'text', '2h00m left · cold now, first ping 50m after the next turn', statusIcons.vscode.cold.svg)))
     await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'summary', toolUses: [] }] })
-    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('unknown', undefined, '2h00m left · waiting for the first turn after compaction', statusIcons.vscode.neutral.svg)))
+    expect(bare(own(await ui.drawn()))).toEqual(alone(vscodeRow('unknown', undefined, '2h00m left · waiting for the first turn after compaction', statusIcons.vscode.neutral.svg)))
   })
 
   test('VS Code: API busy keeps its wording after the prefix, and a stopped loop says its reason once', async ($, on) => {
@@ -588,9 +572,9 @@ describe('the box above the prompt', () => {
     await $.command.run(run('keepwarm', '3h'))
     const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
     await clock.advance(50 * MIN)
-    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('warm', 'success', '2h10m left · API busy, ping retry 1 of 3', statusIcons.vscode.warm.svg)))
+    expect(bare(own(await ui.drawn()))).toEqual(alone(vscodeRow('warm', 'success', '2h10m left · API busy, ping retry 1 of 3', statusIcons.vscode.warm.svg)))
     await clock.advance(MIN)
-    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('stopped', undefined, 'the ping read 0 and wrote 200k tokens ($4.00), the cache was already gone', statusIcons.vscode.neutral.svg)))
+    expect(bare(own(await ui.drawn()))).toEqual(alone(vscodeRow('stopped', undefined, 'the ping read 0 and wrote 200k tokens ($4.00), the cache was already gone', statusIcons.vscode.neutral.svg)))
     expect(textOf(await ui.drawn())).toBe('cache-tax stopped · the ping read 0 and wrote 200k tokens ($4.00), the cache was already gone')
   })
 
@@ -601,9 +585,9 @@ describe('the box above the prompt', () => {
     await $.turn.complete(turn())
     await $.command.run(run('keepwarm', '90m'))
     const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
-    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('warm', undefined, '1h30m left · ping in 50m', statusIcons.vscode.neutral.svg)))
+    expect(bare(own(await ui.drawn()))).toEqual(alone(vscodeRow('warm', undefined, '1h30m left · ping in 50m', statusIcons.vscode.neutral.svg)))
     await clock.advance(HOUR)
-    expect(bare(await ui.drawn())).toEqual(alone(vscodeRow('cold', undefined, '30m left · cold now, first ping 50m after the next turn', statusIcons.vscode.neutral.svg)))
+    expect(bare(own(await ui.drawn()))).toEqual(alone(vscodeRow('cold', undefined, '30m left · cold now, first ping 50m after the next turn', statusIcons.vscode.neutral.svg)))
   })
 
   for (const surface of ['terminal', 'desktop', 'vscode'] as const) {
@@ -618,23 +602,12 @@ describe('the box above the prompt', () => {
       await $.command.run(run('keepwarm', '90m'))
       const drawn = await ui.drawn()
       expect(all(drawn).some(el => el.type === 'engine')).toBe(false)
-      if (surface === 'vscode') expect(bare(drawn)).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
+      if (surface === 'vscode') expect(bare(own(drawn))).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
       else expect((drawn as El).props).toMatchObject({ flexDirection: 'row' })
       expect(textOf(drawn)).toMatch(/cache-tax.*warm.*1h30m left · ping in 50m$/)
     })
 
-    test(`${surface}: rows beneath that draw nothing leave the row alone`, async ($, on) => {
-      mock.clock(on, { now: START })
-      world(on, [], { beneath: 'empty' })
-      await $.session.start({ ...session, surface, isInteractive: true })
-      await $.turn.complete(turn())
-      await $.command.run(run('keepwarm', '90m'))
-      const ui = await $.ui.mount({ plugin: 'cache-tax', surface, component: 'AbovePrompt', props: bandProps })
-      const drawn = bare(await ui.drawn()) as El
-      if (surface === 'vscode') expect(drawn).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
-      else expect(drawn.props).toMatchObject({ flexDirection: 'row' })
-      expect(textOf(drawn)).toMatch(/cache-tax/)
-    })
+    // Stacking with rows beneath is drawn by box-layout under Claude Code 2.1.323 and is covered by its tests
   }
 
   test('VS Code: standing alone, the block brings its own space above and owns the box\'s bottom edge', async ($, on) => {
@@ -644,69 +617,22 @@ describe('the box above the prompt', () => {
     await $.turn.complete(turn())
     await $.command.run(run('keepwarm', '90m'))
     const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
-    const drawn = bare(await ui.drawn()) as El
+    const drawn = bare(own(await ui.drawn())) as El
     // textfold-px's startsSpaced and endsSpaced read these: the block above then adds no gap and no bottom space
     // The key is the handoff to a mod above that draws this row beside its own (textfold-px)
-    expect(drawn.props).toEqual({ key: KEEPWARM_KEY, flexDirection: 'column', paddingTop: SPACE.above, paddingBottom: SPACE.end })
+    expect(drawn.props).toEqual({ key: KEEPWARM_KEY, flexDirection: 'column', flexShrink: 1, minWidth: 0, paddingTop: SPACE.above, paddingBottom: SPACE.end })
     expect(KEEPWARM_KEY).toBe('cache-tax:keepwarm')
     expect(SPACE.above).toBeGreaterThan(0)
     expect(SPACE.end).toBeGreaterThan(0)
     expect((drawn.children as El[]).length).toBe(1)
   })
 
-  test('VS Code: under rows beneath, a divider joins them to the block, none above them, and the box\'s bottom edge', async ($, on) => {
-    mock.clock(on, { now: START })
-    world(on, [], { beneath: 'reflect' })
-    await $.session.start({ ...session, surface: 'vscode', isInteractive: true })
-    await $.turn.complete(turn())
-    await $.command.run(run('keepwarm', '90m'))
-    const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
-    const drawn = bare(await ui.drawn()) as El
-    // No space on the root: the block above keeps its own gap over the rows beneath, and the block under the divider,
-    // the same as it stands alone, owns the box's bottom edge
-    expect(drawn.props).toEqual({ flexDirection: 'column' })
-    const [theirs, line, block] = drawn.children as El[]
-    expect(textOf(theirs)).toBe('reflect · "Answer in Korean"')
-    expect(all(theirs).filter(el => el.type === 'Button').map(el => el.props?.label)).toEqual(['Save to ./CLAUDE.md', 'Skip'])
-    expect(line).toEqual(divider(false))
-    expect(block).toEqual(alone(vscodeRow('warm', 'success', '1h30m left · ping in 50m', statusIcons.vscode.warm.svg)))
-    expect(endsSpaced(drawn)).toBe(true)
-  })
-
-  test('VS Code: rows beneath that bring their own space under them get no space added above the divider', async ($, on) => {
-    mock.clock(on, { now: START })
-    world(on, [], { beneath: 'spaced' })
-    await $.session.start({ ...session, surface: 'vscode', isInteractive: true })
-    await $.turn.complete(turn())
-    await $.command.run(run('keepwarm', '90m'))
-    const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
-    const drawn = bare(await ui.drawn()) as El
-    expect(drawn.props).toEqual({ flexDirection: 'column' })
-    expect((drawn.children as El[])[0].props).toMatchObject({ paddingBottom: 0.3 })
-    expect((drawn.children as El[])[1]).toEqual(divider(true))
-    expect((drawn.children as El[]).length).toBe(3)
-  })
-
-  test('VS Code: the divider is a 1px line of the prompt\'s border color whose Box takes no height', async ($, on) => {
-    // At the chat font's 13px the line is a pixel, within a twentieth, and it hangs under its join by less than the
-    // block's own space above its row
-    expect(Math.abs(DIVIDER.line * LINE_PX - 1)).toBeLessThan(0.05)
-    expect((DIVIDER.hang + DIVIDER.line) * LINE_PX).toBeLessThan(SPACE.above * LINE_PX)
-    mock.clock(on, { now: START })
-    world(on, [], { beneath: 'reflect' })
-    await $.session.start({ ...session, surface: 'vscode', isInteractive: true })
-    await $.turn.complete(turn())
-    await $.command.run(run('keepwarm', '90m'))
-    const ui = await $.ui.mount({ plugin: 'cache-tax', surface: 'vscode', component: 'AbovePrompt', props: bandProps })
-    const lines = all(await ui.drawn()).filter(isDivider)
-    expect(lines.length).toBe(1)
-    expect(lines[0].props).toEqual({ height: DIVIDER.line, marginTop: DIVIDER.hang, flexShrink: 0, backgroundColor: 'promptBorder' })
-  })
+  // Stacking with rows beneath is drawn by box-layout under Claude Code 2.1.323 and is covered by its tests
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    test(`${surface}: under rows beneath, the same column and row as before, with no gap`, async ($, on) => {
+    test(`${surface}: the row as before: its icon, warm and cold in their colors, and each state's wording`, async ($, on) => {
       const clock = mock.clock(on, { now: 10 * HOUR })
-      world(on, [nothing], { beneath: 'reflect' })
+      world(on, [nothing])
       await $.session.start({ ...session, surface, isInteractive: true })
       await $.turn.complete(turn())
       await $.command.run(run('keepwarm', '3h'))
@@ -716,17 +642,12 @@ describe('the box above the prompt', () => {
       const icon = (state: 'warm' | 'cold') => surface === 'terminal'
         ? { type: 'Image', props: { source: { png: statusIcons.dark[state].png }, columns: 3, rows: 1, alt: '[>]' } }
         : { type: 'Svg', props: { source: statusIcons.dark[state].svg, width: 18, height: 18, alt: 'Cache Tax' } }
-      let drawn = bare(await ui.drawn()) as El
-      expect(drawn.props).toEqual({ flexDirection: 'column' })
-      // No divider: the rows beneath and then the row, as before
-      expect((drawn.children as El[]).length).toBe(2)
-      expect(all(drawn).some(el => el.props?.backgroundColor === 'promptBorder')).toBe(false)
-      expect(textOf((drawn.children as El[])[0])).toBe('reflect · "Answer in Korean"')
-      expect((drawn.children as El[])[1]).toEqual(classicRow(icon('warm'), 'warm', 'success', `${kw}3h00m left · ping in 50m`, surface === 'desktop', surface === 'terminal'))
+      expect(bare(own(await ui.drawn()))).toEqual(classicRow(icon('warm'), 'warm', 'success', `${kw}3h00m left · ping in 50m`, surface === 'desktop', surface === 'terminal'))
+      // No divider in the row
+      expect(all(own(await ui.drawn())).some(el => el.props?.backgroundColor === 'promptBorder')).toBe(false)
       await clock.advance(HOUR)
-      drawn = bare(await ui.drawn()) as El
       // The terminal and the desktop keep the orange word, and each state its wording
-      expect((drawn.children as El[])[1]).toEqual(classicRow(icon('cold'), 'cold', '#d97757', `${kw}2h00m left · cold now, first ping 50m after the next turn`, surface === 'desktop', surface === 'terminal'))
+      expect(bare(own(await ui.drawn()))).toEqual(classicRow(icon('cold'), 'cold', '#d97757', `${kw}2h00m left · cold now, first ping 50m after the next turn`, surface === 'desktop', surface === 'terminal'))
     })
 
     test(`${surface}: a stopped loop keeps its wording`, async ($, on) => {
