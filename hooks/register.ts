@@ -81,6 +81,8 @@ type GuardMode = 'warn' | number
 
 export type State = {
   hasBand: boolean
+  /** The provider when it is not Anthropic's own API (Bedrock, Vertex, Foundry): keepwarm is off there, see providerOf. */
+  thirdParty: string | null
   sid: string
   deadline: number
   every: number
@@ -460,6 +462,11 @@ async function reseat($: EngineInterface, s: State) {
 async function arm($: EngineInterface, s: State) {
   disarm(s)
   s.retries = 0
+  // No window is kept on a third-party provider (providerOf): a restored or extended one is closed here
+  if (s.thirdParty && s.deadline) {
+    s.deadline = 0
+    if (s.sid) await $.store.delete(deadlineKey(s))
+  }
   if (!s.deadline) return
   const now = await $.clock.now()
   // A timer set while the clock was read, such as a retry, is replaced here, never left running beside this one;
@@ -484,7 +491,7 @@ async function arm($: EngineInterface, s: State) {
 
 async function ping($: EngineInterface, s: State) {
   s.pending = null
-  if (!s.deadline) return
+  if (!s.deadline || s.thirdParty) return
   const tick = s.tick
   const now = await $.clock.now()
   // A timer set or cancelled while the clock was read (an extension, a retry, a turn) owns the window now;
@@ -587,6 +594,7 @@ function armedText(s: State, now: number, windowMs: number): string {
 // before deciding to open a window passes the count it read first. An always renewal also passes the always
 // generation it read, so a /keepwarm always meanwhile wins the same way.
 async function startWindow($: EngineInterface, s: State, windowMs: number, every: number, offs = s.offs, gen = s.alwaysGen) {
+  if (s.thirdParty) return
   const stale = () => s.offs !== offs || s.alwaysGen !== gen
   if (stale()) return
   const now = await $.clock.now()
@@ -639,7 +647,7 @@ function card(s: State, now: number): string {
 
 export function freshState(): State {
   return {
-    hasBand: false, sid: '', deadline: 0, every: PING_AFTER_MS, always: false, alwaysMs: DEFAULT_WINDOW_MS, alwaysGen: 0, lastRequestAt: 0, lastResponseAt: 0, lastModel: null, ctx: 0, compacted: false,
+    hasBand: false, thirdParty: null, sid: '', deadline: 0, every: PING_AFTER_MS, always: false, alwaysMs: DEFAULT_WINDOW_MS, alwaysGen: 0, lastRequestAt: 0, lastResponseAt: 0, lastModel: null, ctx: 0, compacted: false,
     resumedAt: 0, transcript: 0, guard: 0, ackedAt: 0, coldWritePending: false, misses: [], pending: null, statusRefresh: null, last: null, stopped: null,
     waitForTurn: false, retries: 0, retryReason: '', gen: 0, tick: 0, offs: 0, turnOffs: null, inFlight: false, stepWrites: null, steps: 0, endingSid: '', unpricedTold: '', testOnce: false,
   }
@@ -708,6 +716,18 @@ export function endsSpaced(node: unknown): boolean {
 // Mobile, and a session with no surface, have no box above the prompt: they keep the status line. A surface with a box
 // moves the row into it, at the start or when it attaches later (VS Code runs the session as an SDK process). The
 // preferences the row is drawn with are read then, once; null when nothing changed.
+/** The provider when Claude Code runs on one other than Anthropic's own API, from the variables that select it; null
+ *  on Anthropic's API. On Bedrock Claude Code writes the prompt cache for 5 minutes, not an hour (its transcripts
+ *  show `ephemeral_5m` writes only), so a ping 50 minutes on finds the cache cold and writes it again at full price:
+ *  keepwarm is off there. */
+const isSet = (v: string | undefined) => v !== undefined && v !== '' && v !== '0' && v.toLowerCase() !== 'false'
+async function providerOf($: EngineInterface): Promise<string | null> {
+  if (isSet(await $.env.get('CLAUDE_CODE_USE_BEDROCK'))) return 'Bedrock'
+  if (isSet(await $.env.get('CLAUDE_CODE_USE_VERTEX'))) return 'Vertex'
+  if (isSet(await $.env.get('CLAUDE_CODE_USE_FOUNDRY'))) return 'Foundry'
+  return null
+}
+
 async function drawIn($: EngineInterface, s: State, surface: RenderSurface | null): Promise<{ light: boolean; noColor: boolean } | null> {
   if (s.hasBand || !(surface === 'terminal' || surface === 'desktop' || surface === 'vscode')) return null
   s.hasBand = true
@@ -829,6 +849,7 @@ export const register: Register = (on, options) => {
     const saved = await $.store.get(deadlineKey(s))
     const savedEvery = await $.store.get(everyKey(s))
     const savedGuard = await $.store.get(KEY_GUARD)
+    s.thirdParty = await providerOf($)
     s.deadline = typeof saved === 'number' && saved > now ? saved : 0
     s.every = typeof savedEvery === 'number' && savedEvery >= MIN_PING_MS && savedEvery < TTL_MS ? savedEvery : PING_AFTER_MS
     // A number is refuse with a dollar floor; a release before 2.4.0 reads it as plain refuse.
@@ -837,7 +858,10 @@ export const register: Register = (on, options) => {
     s.always = stored > 0
     if (stored) s.alwaysMs = stored
     // Always means a fresh window of its length every session, whatever the last one left behind.
-    if (s.always) await startWindow($, s, s.alwaysMs, PING_AFTER_MS)
+    if (s.thirdParty) {
+      if (s.deadline) $.ui.log(`keepwarm is off on ${s.thirdParty}: Claude Code keeps the prompt cache there for 5 minutes, so a ping could not keep it warm and would rewrite it at full price.`)
+      await arm($, s)
+    } else if (s.always) await startWindow($, s, s.alwaysMs, PING_AFTER_MS)
     // The classic start arms a restored window too, but a managed plugin above this tier may continue beneath it; arming twice leaves one timer.
     else if (s.deadline) await arm($, s)
     await $.command.register({
@@ -902,6 +926,9 @@ export const register: Register = (on, options) => {
     await reseat($, s)
     const words = String(e.args ?? '').trim().split(/\s+/).filter(Boolean)
     const now = await $.clock.now()
+    if (s.thirdParty && words[0] !== 'off' && words[0] !== 'status') {
+      return { text: `keepwarm is off on ${s.thirdParty}: Claude Code keeps the prompt cache there for 5 minutes, so a ping could not keep it warm and would rewrite it at full price` }
+    }
     if (words[0] === 'off') {
       const wasAlways = s.always
       await stop($, s, null, true)
@@ -1123,7 +1150,7 @@ export const register: Register = (on, options) => {
         const usd = writes?.priced ? writes.usd : price ? write * price[1] / 1e6 : null
         s.misses.push({ at: now, tokens: write, usd })
         // With always on, its own window governs renewal, shorter than three hours or not; the guard promised that one.
-        const extend = autoWarm && !s.always && s.deadline < now + AUTO_WARM_MS && s.offs === offs
+        const extend = autoWarm && !s.thirdParty && !s.always && s.deadline < now + AUTO_WARM_MS && s.offs === offs
         if (extend) await startWindow($, s, AUTO_WARM_MS, s.every, offs)
         $.ui.log(`cold write of ${fmtTok(write)} tokens paid (${fmtUsd(usd)}).` +
           (extend ? ` Keeping the cache warm for ${fmtDuration(AUTO_WARM_MS)} so it is not paid again today; /keepwarm off to stop.` : ''))

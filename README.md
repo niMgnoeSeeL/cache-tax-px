@@ -1,4 +1,4 @@
-## Local fork changes (2.4.2-px.3)
+## Local fork changes (2.4.2-px.4)
 
 This is `cache-tax-px`, a local fork of cache-tax 2.4.2, installed as `cache-tax@claude-mod`. It changes only how the row above the prompt is laid out, to the shared box's contract in `claude-mod/layout/ABOVE-PROMPT.md` (C1 and C2). The guard, the pings, the commands and their wording are upstream's.
 
@@ -19,6 +19,7 @@ This is `cache-tax-px`, a local fork of cache-tax 2.4.2, installed as `cache-tax
   - **Under rows beneath**, the root is the column `[rows, divider, block]`, with no space of its own, so the space above those rows stays the block above's. The divider is a 1px line in the theme's prompt border color (`promptBorder`) across the content's width, in the middle of the 7px between the rows and this row: `marginTop 0.12` from their last ink to the divider's join, and none when they end with space of their own. The divider's Box takes no height; its line hangs `0.044` lines under the join, into the block's space above its row, and sits 3px over the icon.
   - **Measured** in the composite preview (`layout/preview`, savvy-progress-px, textfold-px, reflect-mod-px and this mod, at 280, 420 and 640px, light and dark, averaged over eight sub-pixel positions of the frame): 2.94–3.03px on each side of each divider, title → first row 7.0–7.25px, and this row → the box's edge as above.
 - **The terminal's row** carries the same key, `cache-tax:keepwarm`, on the row itself, so textfold-px can draw it at the right end of the fold row's line from 78 columns. It never wraps: its text truncates with `…`. Like the VS Code row it leaves out the status's leading `keepwarm `: `[>] cache-tax · warm · 1h25m left · ping in 50m`; every state keeps its wording after that prefix.
+- **No keepwarm on Bedrock, Vertex or Foundry** (`CLAUDE_CODE_USE_BEDROCK`, `_VERTEX`, `_FOUNDRY`). There Claude Code writes the prompt cache for 5 minutes, not an hour (a Bedrock session's transcript shows `ephemeral_5m` writes only), so a ping 50 minutes after a request finds the cache cold and rewrites it at full price. A paid cold write arms nothing, `/keepwarm` says why it stays off, and a window restored at session start is closed with one line saying so.
 - **The terminal, the desktop and mobile** draw upstream's tree otherwise, apart from the stacking above: no gap and no divider.
 
 <picture>

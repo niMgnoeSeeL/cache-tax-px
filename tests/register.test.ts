@@ -41,7 +41,7 @@ function drawBeneath(_ui: ElementTable, _kind: Beneath) {
 
 // The world beneath the mod: its store, the engine's answers, and a fork that
 // replies from a script so each test decides what the cache looked like.
-function world(on: On, forkAnswers: ForkAnswer[], opts: { store?: Map<string, unknown>; commands?: string[]; live?: { tokens?: number }; startedAt?: () => number; sid?: string | (() => string); model?: string | (() => string); bandText?: string; beneath?: Beneath; theme?: { value: string }; noColor?: boolean; denyTheme?: boolean; writtenTheme?: string; gate?: () => Promise<void>; steps?: TurnUsage[]; storeGate?: (op: 'get' | 'set' | 'delete', key: string) => Promise<void> } = {}) {
+function world(on: On, forkAnswers: ForkAnswer[], opts: { store?: Map<string, unknown>; commands?: string[]; live?: { tokens?: number }; startedAt?: () => number; sid?: string | (() => string); model?: string | (() => string); bandText?: string; beneath?: Beneath; theme?: { value: string }; noColor?: boolean; provider?: string; denyTheme?: boolean; writtenTheme?: string; gate?: () => Promise<void>; steps?: TurnUsage[]; storeGate?: (op: 'get' | 'set' | 'delete', key: string) => Promise<void> } = {}) {
   if (opts.store) {
     const store = opts.store
     // A read takes its value first and is delivered after the gate, as a reply can arrive late.
@@ -51,7 +51,11 @@ function world(on: On, forkAnswers: ForkAnswer[], opts: { store?: Map<string, un
     on('store.keys', () => ({ value: [...store.keys()] }))
   } else mock.store(on, {})
   const reads = { theme: 0, env: 0 }
-  on('env.get', ($, e) => { reads.env++; return { value: e.name === 'NO_COLOR' && opts.noColor ? '1' : undefined } })
+  // Counts the reads of the drawing preference (NO_COLOR) alone; `provider` names the variable that selects a third-party provider
+  on('env.get', ($, e) => {
+    if (e.name === 'NO_COLOR') reads.env++
+    return { value: e.name === 'NO_COLOR' && opts.noColor ? '1' : opts.provider && e.name === opts.provider ? '1' : undefined }
+  })
   on('config.list', () => {
     reads.theme++
     return { value: [{ key: 'theme', label: 'Theme', kind: 'choice', value: opts.theme?.value ?? 'dark', provider: { plugin: 'engine', tier: 'core' }, isLocked: false }] }
@@ -903,6 +907,34 @@ describe('guard', () => {
     const card = await $.command.run(run('cache-tax', 'status'))
     expect(card.text).toMatch(/session     1 cold write paid, \$4\.01/)
     expect(card.text).toMatch(/keepwarm    on, 2h10m left/)
+  })
+
+  test('on Bedrock a paid cold write arms no keepwarm: its cache lasts 5 minutes', async ($, on) => {
+    const clock = mock.clock(on, { now: START })
+    const w = world(on, [warm, warm], { provider: 'CLAUDE_CODE_USE_BEDROCK' })
+    await $.session.start(session)
+    await $.turn.complete(turn())
+    await clock.advance(3 * HOUR)
+    await $.prompt.submit(prompt('hi'))
+    await $.prompt.submit(prompt('hi'))
+    await $.turn.complete(turn({ usage: usage({ cache_read_input_tokens: 0, cache_creation_input_tokens: 200502 }) }))
+    expect(w.logs.at(-1)).toMatch(/cold write of 201k tokens paid/)
+    expect(w.logs.at(-1)).not.toMatch(/Keeping the cache warm/)
+    await clock.advance(2 * HOUR)
+    expect(w.forks.length).toBe(0)
+  })
+
+  test('on Vertex /keepwarm says why it stays off, and a restored window is closed without a ping', async ($, on) => {
+    const clock = mock.clock(on, { now: START })
+    const store = new Map<string, unknown>([['deadline:S1', START + 3 * HOUR]])
+    const w = world(on, [warm, warm], { provider: 'CLAUDE_CODE_USE_VERTEX', store })
+    await $.session.start(session)
+    expect(w.logs.some(l => /keepwarm is off on Vertex/.test(l))).toBe(true)
+    expect(store.has('deadline:S1')).toBe(false)
+    await $.turn.complete(turn())
+    expect((await $.command.run(run('keepwarm', '2h'))).text).toMatch(/^keepwarm is off on Vertex: Claude Code keeps the prompt cache there for 5 minutes/)
+    await clock.advance(2 * HOUR)
+    expect(w.forks.length).toBe(0)
   })
 
   test('context comes from the live window, not the turn\'s summed usage', async ($, on) => {
